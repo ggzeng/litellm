@@ -141,6 +141,17 @@ def _split_assembled_content_for_replay(content: Optional[str]) -> list[str]:
     return _REPLAY_CONTENT_SLICE_RE.findall(content)
 
 
+def _clear_later_replay_slice_metadata(choice: StreamingChoices) -> None:
+    choice.delta.role = None
+    choice.delta.tool_calls = None
+    choice.delta.function_call = None
+    del choice.delta.reasoning_content
+    del choice.delta.thinking_blocks
+    choice.logprobs = None  # type: ignore[assignment]
+    if hasattr(choice, "enhancements"):
+        del choice.enhancements
+
+
 async def convert_to_streaming_response_async(
     response_object: Optional[dict] = None,
 ):
@@ -266,12 +277,7 @@ async def convert_to_streaming_response_async(
         slice_chunk = model_response_object.model_copy(deep=True)
         slice_chunk.choices[0].delta.content = piece
         if i > 0:
-            # role, tool_calls and function_call belong on the first slice
-            # only — repeating them would make downstream handlers that
-            # accumulate tool-call deltas collect them N times.
-            slice_chunk.choices[0].delta.role = None
-            slice_chunk.choices[0].delta.tool_calls = None
-            slice_chunk.choices[0].delta.function_call = None
+            _clear_later_replay_slice_metadata(slice_chunk.choices[0])
         slice_chunk.choices[0].finish_reason = (
             original_finish_reason if i == last_idx else None  # type: ignore[assignment]
         )
@@ -364,12 +370,7 @@ def convert_to_streaming_response(
         slice_chunk = model_response_object.model_copy(deep=True)
         slice_chunk.choices[0].delta.content = piece
         if i > 0:
-            # role, tool_calls and function_call belong on the first slice
-            # only — repeating them would make downstream handlers that
-            # accumulate tool-call deltas collect them N times.
-            slice_chunk.choices[0].delta.role = None
-            slice_chunk.choices[0].delta.tool_calls = None
-            slice_chunk.choices[0].delta.function_call = None
+            _clear_later_replay_slice_metadata(slice_chunk.choices[0])
         slice_chunk.choices[0].finish_reason = (
             original_finish_reason if i == last_idx else None  # type: ignore[assignment]
         )
